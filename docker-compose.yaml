@@ -1,0 +1,41 @@
+version: "1"
+services:
+  vault:
+    image: hashicorp/vault
+    container_name: vault
+    ports:
+      - 8200:8200
+    volumes:
+      - ./config.hcl:/vault/config/config.hcl
+      - ./cert:/vault/cert/
+      - vault-data:/vault/file/
+    environment:
+      - VAULT_ADDR=http://localhost:8200
+    cap_add:
+      - IPC_LOCK # required in order for Vault to lock memory, which prevents it from being swapped to disk
+    command: server # start server immediately
+
+  vault-init:
+    image: hashicorp/vault
+    container_name: vault-init
+    environment:
+      - VAULT_ADDR=https://vault:8200 # https and not http, otherwise error 400 bc tls is enabled
+      - MY_VAULT_TOKEN=${MY_VAULT_TOKEN:-test}
+    volumes:
+      - ./vault-root-token:/vault/file/vault-root-token
+      - ./vault-init.sh:/usr/local/bin/vault-init.sh
+      - vault-data:/vault/file/
+      - ./cert/localhost.crt:/etc/ssl/certs/myCA.crt # add autosigned CA to client for trusted tls communication with server
+    command:
+      - /bin/sh
+      - -c
+      - |
+        chmod +x /usr/local/bin/vault-init.sh
+        /usr/local/bin/vault-init.sh
+    # alpine images do not have bash available! use sh instead
+    restart: on-failure
+    depends_on:
+      - vault
+
+volumes:
+  vault-data:
